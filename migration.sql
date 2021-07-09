@@ -2,7 +2,7 @@
 /**
 Tables that need to be migrated:
 
- - address_abroad
+ - address_abroad		 // OK
  - signatory			 // OK
  - inscription_requester // OK
  - paper_deed			 // OK
@@ -69,6 +69,69 @@ begin
 	print '   Table migration.migration_crh_log already existed'	
 end
 
+print ''
+print '   STAGING data for address_abroad (foreign and third party penholders)'
+print '   ================================================================================'
+declare @addressAbroadOffset as int
+select @addressAbroadOffset = 1 + (select max(address_abroad_id) from crt.address_abroad)
+
+CREATE TABLE #mig_address_abroad
+(
+	registration_id bigint,
+	source_address_abroad_id bigint,
+	address_abroad_id bigint identity(1,1),
+	country varchar(255),
+	municipality varchar(255),
+	house_number varchar(100),
+	street varchar(255),
+	type_map varchar(255)
+)
+
+DBCC CHECKIDENT ('#mig_address_abroad', RESEED, @addressAbroadOffset) WITH NO_INFOMSGS
+print '   Offset id set to:        ' + convert(varchar(20), @addressAbroadOffset)
+
+insert into #mig_address_abroad(registration_id, source_address_abroad_id, country, municipality, house_number, street, type_map)
+select 
+	mcr_current.registration_id as registration_id,
+	ph.penholder_id as source_address_abroad_id,
+	case ph.SA_AddressType
+		when 'STRUCT'then ph.SA_Country
+        else ph.UA_Country
+    end as country,
+	case ph.SA_AddressType
+		when 'STRUCT' then ltrim(rtrim(ph.sa_postalcode)) + ' ' + ltrim(rtrim(ph.SA_MunicipalityName))
+        else ltrim(rtrim(ph.UA_AddressLine2)) + ' ' + ltrim(rtrim(ph.UA_AddressLine3))
+    end as municipality,
+	case ph.SA_AddressType
+		when 'STRUCT' then ph.SA_HouseNumber + ' ' + ph.SA_HouseNumberExtension
+		else null
+    end as house_number,
+	case ph.SA_AddressType
+		when 'STRUCT' then ph.SA_StreetName
+        else ph.UA_AddressLine1
+    end as street,
+	'penholder' as type_map
+from [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_current (nolock) 
+inner join [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_first (nolock)
+	on mcr_current.active = 1
+	and mcr_current.number = mcr_first.number
+	and mcr_first.version = 1
+left join [mig_crh_source].[CRS].[RequestResult] rr_first (nolock)
+	on rr_first.MarriageContractRegistration_Id = mcr_first.Registration_Id
+	and rr_first.RequestResult_Id = (select min(requestResult_id) from [mig_crh_source].[CRS].[RequestResult] (nolock) where MarriageContractRegistration_Id = mcr_first.Registration_Id)	
+left join [mig_crh_source].[CRS].[Demand] demand_first (nolock)
+	on demand_first.AbstractRequest_Id = rr_first.AbstractRequest_Id
+left join [mig_crh_source].[CRS].[Requester] req (nolock)
+	on req.AbstractRequest_Id = rr_first.AbstractRequest_Id
+	and req.Requester_Id = (select min(requester_id) from [mig_crh_source].[CRS].[Requester] (nolock) where AbstractRequest_Id = demand_first.AbstractRequest_Id)
+INNER JOIN [mig_crh_source].[CRS].penholder ph  (nolock) 
+    ON ph.PenHolder_Id = mcr_first.PenHolder_Id
+	and ph.penholdertype = 'FOREIG'
+left outer join migration.migration_crh_log mr  (nolock) 
+	on mr.registration_id = mcr_current.registration_id
+where isnull(mr.status, 'corrected') = 'corrected'
+
+print '   Staged record count:     ' + convert(varchar(20), @@rowcount)
 
 
 print ''
@@ -99,6 +162,9 @@ CREATE TABLE #mig_inscription_requester
 DBCC CHECKIDENT ('#mig_inscription_requester', RESEED, @requesterOffset) with NO_INFOMSGS
 
 print '   Offset id set to:        ' + convert(varchar(20), @requesterOffset)
+
+
+
 
 insert into #mig_inscription_requester(registration_id, source_requester_id, requester_type, organization_id, organization_name, notary_id, notary_firstname, notary_lastname, address_abroad_id, notary_abroad_name, study_abroad_name)
 select 
@@ -140,9 +206,10 @@ select
 		WHEN 'STUDY' THEN isnull(req.lastname, ph.LastName)
 		WHEN 'FRNB' THEN ph.LastName
     END	as notary_last_name,
-	null as address_abroad_id, -- ToDo
+	maa.address_abroad_id as address_abroad_id, 
 	null as notary_abroad_name, 
 	null as study_abroad_name 
+
 from [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_current (nolock) 
 inner join [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_first (nolock)
 	on mcr_current.active = 1
@@ -156,9 +223,12 @@ left join [mig_crh_source].[CRS].[Demand] demand_first (nolock)
 left join [mig_crh_source].[CRS].[Requester] req (nolock)
 	on req.AbstractRequest_Id = rr_first.AbstractRequest_Id
 	and req.Requester_Id = (select min(requester_id) from [mig_crh_source].[CRS].[Requester] (nolock) where AbstractRequest_Id = demand_first.AbstractRequest_Id)
-LEFT OUTER JOIN [mig_crh_source].[CRS].penholder ph  (nolock) 
+LEFT JOIN [mig_crh_source].[CRS].penholder ph  (nolock) 
     ON ph.PenHolder_Id = mcr_first.PenHolder_Id
-left outer join migration.migration_crh_log mr  (nolock) 
+LEFT JOIN #mig_address_abroad maa
+	on maa.registration_id = mcr_current.registration_id
+	and maa.source_address_abroad_id = ph.penholder_id
+left join migration.migration_crh_log mr  (nolock) 
 	on mr.registration_id = mcr_current.registration_id
 where isnull(mr.status, 'corrected') = 'corrected'
 
@@ -672,6 +742,33 @@ print '   Staged record count:     ' + convert(varchar(20), @@rowcount)
 begin tran
 
 
+print ''
+print '   PROMOTE validated data to PRODUCTION for address_abroad'
+print '   ================================================================================'
+
+SET IDENTITY_INSERT [CRT].address_abroad on 
+
+insert into [CRT].address_abroad(address_abroad_id, country, municipality, house_number, street, type_map)
+select address_abroad_id, country, municipality, house_number, street, type_map
+from #mig_address_abroad m
+left outer join migration.migration_crh_log mr
+	on mr.registration_id = m.registration_id
+	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
+where isnull(mr.status, 'corrected') = 'corrected'
+
+print '   Promoted record count:   ' + convert(varchar(20), @@rowcount)
+
+insert into migration.migration_crh_log(registration_id, resource_type, resource_id, status, migrated_on, migrated_id, message, run_uuid)
+select m.registration_id, 'address_abroad', source_address_abroad_id, 'migrated', getdate(), address_abroad_id, 'Successfully migrated', @runId
+from #mig_address_abroad m
+left outer join migration.migration_crh_log mr
+	on mr.registration_id = m.registration_id
+	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
+where isnull(mr.status, 'corrected') = 'corrected'
+
+print '   Logged record count  :   ' + convert(varchar(20), @@rowcount)
+
+SET IDENTITY_INSERT [CRT].address_abroad off
 
 print ''
 print '   PROMOTE validated data to PRODUCTION for inscription_requester'
