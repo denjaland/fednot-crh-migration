@@ -1,18 +1,4 @@
 
-/**
-Tables that need to be migrated:
-
- - address_abroad		 // OK
- - signatory			 // OK
- - inscription_requester // OK
- - paper_deed			 // OK
- - juridical_deed		 // OK
- - person				 // OK
- - address				 // OK
- - address_line			 // OK
- */
-
-
 declare @dryRun int = 0		-- 1: does not insert data into production tables; 0 does.
 
 
@@ -31,7 +17,30 @@ print ''
 use mig_crh_staging
 set nocount on
 
+print '   PREPARE ensure table publication_bog exists on target'
+print '   ================================================================================'
+print '   This step should normally never run, but is added because the test database'
+print '   is running behind some versions'
 
+IF NOT EXISTS (SELECT 1 
+           FROM INFORMATION_SCHEMA.TABLES 
+           WHERE TABLE_TYPE='BASE TABLE' 
+           AND TABLE_NAME='publication_bog' AND TABLE_SCHEMA = 'CRT') 
+
+BEGIN
+	print '   Table CRT.publication_bog created on target database'
+	
+	CREATE TABLE CRT.publication_bog (
+		publication_bog_id int identity(1,1),
+		juridical_deed_id bigint,
+		publish_status_id tinyint,
+		publish_language varchar(2)
+	)
+END 
+else
+begin
+	print '   Table CRT.publication_bog already existed'	
+end
 
 
 
@@ -395,6 +404,7 @@ where isnull(mr.status, 'corrected') = 'corrected'
 print '   Staged record count:     ' + convert(varchar(20), @@rowcount) + ' / ' + convert(varchar(20), @expectedNumberOfPaperDeeds) + ' expected'
 
 
+
 print ''
 print '   STAGING data for migrating juridical_deed'
 print '   ================================================================================'
@@ -511,6 +521,49 @@ left outer join migration.migration_crh_log mr (nolock)
 where isnull(mr.status, 'corrected') = 'corrected'
 print '   Staged record count:     ' + convert(varchar(20), @@rowcount)
 	
+
+print ''
+print '   STAGING data for migrating publication_bog'
+print '   ================================================================================'
+declare @publicationBogOffset as int
+-- select @publicationBogOffset = 1 + (select max(publication_bog_id) from crt.publication_bog) -- TODO: Enable this!
+set @publicationBogOffset = 1
+
+CREATE TABLE #mig_publication_bog
+(
+	registration_id bigint,
+	source_publication_bog_id bigint,
+	publication_bog_id bigint identity(1,1),
+	juridical_deed_id bigint,
+	publish_status_id tinyint,
+	publish_language varchar(2)
+)
+
+DBCC CHECKIDENT ('#mig_publication_bog', RESEED, @publicationBogOffset) with NO_INFOMSGS
+print '   Offset id set to:        ' + convert(varchar(20), @publicationBogOffset)
+
+INSERT INTO #mig_publication_bog(registration_id, source_publication_bog_id, juridical_deed_id, publish_status_id, publish_language)
+SELECT 
+	mcr_current.registration_id as registration_id, 
+	mcr_current.registration_id as source_publication_bog_id,
+	mjd.juridical_deed_id as juridical_deed_id,
+	1 as publish_status_id, -- all is sent
+	mcr_current.BelgianJournalPublicationLanguage as publish_language
+FROM [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_current (nolock) 
+inner join [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_first (nolock)
+	on mcr_current.active = 1
+	and mcr_current.number = mcr_first.number
+	and mcr_first.Version = 1
+	and mcr_current.registrationsubtype = 'HMODDEED'
+	and mcr_current.belgianjournalpublicationrequested = 1
+inner join #mig_paper_deed mpd (nolock) 
+	on mpd.source_paper_deed_id = mcr_current.registration_id
+inner join #mig_juridical_deed mjd (nolock)
+	on mjd.source_juridical_deed_id = mcr_current.registration_id
+
+
+print '   Staged record count:     ' + convert(varchar(20), @@rowcount)
+
 print ''
 print '   STAGING data for migrating person'
 print '   ================================================================================'
@@ -734,6 +787,12 @@ print '   Staged record count:     ' + convert(varchar(20), @@rowcount)
 --                                                                                     --
 -----------------------------------------------------------------------------------------
 
+insert into migration.migration_crh_log(registration_id, resource_type, resource_id, status, migrated_on, migrated_id, message, run_uuid)
+select top 10 m.registration_id, 'address_abroad', source_address_abroad_id, 'error', getdate(), address_abroad_id, 'Test Error to show how it works', @runId
+from #mig_address_abroad m
+
+
+
 
 
 
@@ -885,6 +944,38 @@ where isnull(mr.status, 'corrected') = 'corrected'
 
 print '   Logged record count  :   ' + convert(varchar(20), @@rowcount)
 
+
+print ''
+print '   PROMOTE validated data to PRODUCTION for publication_bog'
+print '   ================================================================================'
+
+SET IDENTITY_INSERT [CRT].publication_bog on
+	
+insert into [CRT].publication_bog(publication_bog_id,juridical_deed_id ,publish_status_id ,publish_language  )
+select publication_bog_id,juridical_deed_id ,publish_status_id ,publish_language
+from #mig_publication_bog m
+left outer join migration.migration_crh_log mr
+	on mr.registration_id = m.registration_id
+	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
+where isnull(mr.status, 'corrected') = 'corrected'
+
+print '   Promoted record count:   ' + convert(varchar(20), @@rowcount)
+
+SET IDENTITY_INSERT [CRT].publication_bog off
+
+insert into migration.migration_crh_log(registration_id, resource_type, resource_id, status, migrated_on, migrated_id, message, run_uuid)
+select m.registration_id, 'publication_bog', source_publication_bog_id, 'migrated', getdate(), publication_bog_id, 'Successfully migrated', @runId
+from #mig_publication_bog m
+left outer join migration.migration_crh_log mr
+	on mr.registration_id = m.registration_id
+	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
+where isnull(mr.status, 'corrected') = 'corrected'
+
+print '   Logged record count  :   ' + convert(varchar(20), @@rowcount)
+
+
+
+
 print ''
 print '   PROMOTE validated data to PRODUCTION for person'
 print '   ================================================================================'
@@ -991,17 +1082,23 @@ drop table #mig_address_line
 print 'OK #mig_address_line dropped'
 drop table #mig_signatory
 print 'OK #mig_signatory dropped'
+drop table #mig_address_abroad
+print 'OK #mig_address_abroad dropped'
+drop table #mig_publication_bog
+print 'OK #mig_publication_bog dropped'
 
 if @dryRun = 0 
 begin
 	commit
-	print 'OK  TRANSACTION COMMITTED.  MIGRATION COMPLETED'
+	print 'OK TRANSACTION COMMITTED.  MIGRATION COMPLETED'
 end
 else
 begin
 	rollback
-	print '!!  TRANSACTION ROLLED BACK.  MIGRATION DID NOT COMPLETE - DRY RUN ONLY'
+	print '!! TRANSACTION ROLLED BACK.  MIGRATION DID NOT COMPLETE - DRY RUN ONLY'
 end
+
+
 
 
 
