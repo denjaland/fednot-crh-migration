@@ -82,7 +82,7 @@ print ''
 print '   STAGING data for address_abroad (foreign and third party penholders)'
 print '   ================================================================================'
 declare @addressAbroadOffset as int
-select @addressAbroadOffset = 1 + (select max(address_abroad_id) from crt.address_abroad)
+select @addressAbroadOffset = 1 + (select isnull(max(address_abroad_id),0) from crt.address_abroad)
 
 CREATE TABLE #mig_address_abroad
 (
@@ -93,7 +93,7 @@ CREATE TABLE #mig_address_abroad
 	municipality varchar(255),
 	house_number varchar(100),
 	street varchar(255),
-	type_map varchar(255)
+	type_map varchar(255) -- does not exist on current version
 )
 
 DBCC CHECKIDENT ('#mig_address_abroad', RESEED, @addressAbroadOffset) WITH NO_INFOMSGS
@@ -148,7 +148,7 @@ print '   STAGING data for migrating inscription_requester'
 print '   ================================================================================'
 
 declare @requesterOffset as int
-select @requesterOffset = 1 + (select max(requester_id) from crt.inscription_requester)
+select @requesterOffset = 1 + (select isnull(max(requester_id),0) from crt.inscription_requester)
 
 
 
@@ -165,7 +165,9 @@ CREATE TABLE #mig_inscription_requester
 	notary_lastname varchar(100),
 	address_abroad_id bigint,
 	notary_abroad_name varchar(255),
-	study_abroad_name varchar(255)
+	study_abroad_name varchar(255),
+	clerk_name varchar(100),
+	court_name varchar(100)
 );
 
 DBCC CHECKIDENT ('#mig_inscription_requester', RESEED, @requesterOffset) with NO_INFOMSGS
@@ -175,15 +177,15 @@ print '   Offset id set to:        ' + convert(varchar(20), @requesterOffset)
 
 
 
-insert into #mig_inscription_requester(registration_id, source_requester_id, requester_type, organization_id, organization_name, notary_id, notary_firstname, notary_lastname, address_abroad_id, notary_abroad_name, study_abroad_name)
+insert into #mig_inscription_requester(registration_id, source_requester_id, requester_type, organization_id, organization_name, notary_id, notary_firstname, notary_lastname, address_abroad_id, notary_abroad_name, study_abroad_name, clerk_name, court_name)
 select 
 	mcr_current.Registration_Id as registration_id,
 	req.requester_id as requester_id,
 	CASE req.RequesterType
-      WHEN 'MOROAS' THEN 'REGISTER_ABROAD_MANAGER'  
-      WHEN 'FRNB' THEN 'FEDNOT'
-      WHEN 'FPSFA' then 'FOREIGN_AFFAIRS'
-      ELSE req.RequesterType
+	  WHEN 'CCLERK' THEN 'COURT'
+      WHEN 'MOROAS' THEN 'ABROAD'  
+	  WHEN 'STUDY' THEN 'STUDY'
+      ELSE 'OTHER_REQUESTER'
     END	as requester_type,
 	CASE
 		WHEN req.requestertype = 'FRNB' THEN isnull(demand_first.creatorstudyid, 214422)
@@ -217,7 +219,9 @@ select
     END	as notary_last_name,
 	maa.address_abroad_id as address_abroad_id, 
 	null as notary_abroad_name, 
-	null as study_abroad_name 
+	null as study_abroad_name,
+	null as clerk_name,
+	null as court_name
 
 from [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_current (nolock) 
 inner join [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_first (nolock)
@@ -239,7 +243,7 @@ LEFT JOIN #mig_address_abroad maa
 	and maa.source_address_abroad_id = ph.penholder_id
 left join migration.migration_crh_log mr  (nolock) 
 	on mr.registration_id = mcr_current.registration_id
-where isnull(mr.status, 'corrected') = 'corrected'
+where isnull(mr.status, 'corrected') = 'corrected'  
 
 print '   Staged record count:     ' + convert(varchar(20), @@rowcount)
 
@@ -247,7 +251,7 @@ print ''
 print '   STAGING data for migrating signatory'
 print '   ================================================================================'
 declare @signatoryOffset as int
-select @signatoryOffset = 1 + (select max(signatory_id) from crt.signatory)
+select @signatoryOffset = 1 + (select isnull(max(signatory_id),0) from crt.signatory)
 
 CREATE TABLE #mig_signatory
 (
@@ -263,12 +267,14 @@ CREATE TABLE #mig_signatory
 	address_abroad_id bigint,
 	notary_abroad_name varchar(255),
 	study_abroad_name varchar(255),
-	nrn varchar(11)
+	nrn varchar(11),
+	clerk_name varchar(100),
+	court_name varchar(100)
 )
 DBCC CHECKIDENT ('#mig_signatory', RESEED, @signatoryOffset) with NO_INFOMSGS
 print '   Offset id set to:        ' + convert(varchar(20), @signatoryOffset)
 
-insert into #mig_signatory(registration_id, source_signatory_id, organization_id, organization_name, notary_id, notary_firstname, notary_lastname, signatory_type, address_abroad_id, notary_abroad_name, study_abroad_name, nrn)
+insert into #mig_signatory(registration_id, source_signatory_id, organization_id, organization_name, notary_id, notary_firstname, notary_lastname, signatory_type, address_abroad_id, notary_abroad_name, study_abroad_name, nrn, clerk_name, court_name)
 select 
 	mcr_current.registration_id,
 	ph.PenHolder_Id as source_signatory_id,
@@ -287,7 +293,9 @@ select
 		when 'FOREIG' then ph.name
 		else null
 	end as study_abroad_name,
-	null as nrn
+	null as nrn,
+	null as clerk_name,
+	null as court_name
 from [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_current (nolock) 
 inner join [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_first (nolock)
 	on mcr_current.active = 1
@@ -306,7 +314,7 @@ print '   STAGING data for migrating paper_deed'
 print '   ================================================================================'
 
 declare @paperDeedOffset as int
-select @paperDeedOffset = 1 + (select max(paper_deed_id) from crt.paper_deed)
+select @paperDeedOffset = 1 + (select isnull(max(paper_deed_id),0) from crt.paper_deed)
 
 declare @expectedNumberOfPaperDeeds as int
 select @expectedNumberOfPaperDeeds = count(*) from [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_current (nolock) 
@@ -337,8 +345,6 @@ CREATE TABLE #mig_paper_deed
 	updated_by_organization_name varchar(100),
 	updated_by_organization_id bigint,
 	updated_by_user_id bigint,
-	import_state varchar(20),
-	import_result varchar(20),
 	nap_id varchar(50)
 );
 
@@ -346,10 +352,10 @@ DBCC CHECKIDENT ('#mig_paper_deed', RESEED, @paperDeedOffset) with NO_INFOMSGS
 print '   Offset id set to:        ' + convert(varchar(20), @paperDeedOffset)
 
 
-insert into #mig_paper_deed( registration_id, source_paper_deed_id, status_id, deed_date, dossier_reference, repertorium_number, request_date, signatory_id, created_on, updated_on, updated_by_user_name, created_by_organization_name, created_by_organization_id, created_by_user_name, created_by_user_id, requester_id, updated_by_organization_name, updated_by_organization_id, updated_by_user_id, import_state, import_result, nap_id)
+insert into #mig_paper_deed( registration_id, source_paper_deed_id, status_id, deed_date, dossier_reference, repertorium_number, request_date, signatory_id, created_on, updated_on, updated_by_user_name, created_by_organization_name, created_by_organization_id, created_by_user_name, created_by_user_id, requester_id, updated_by_organization_name, updated_by_organization_id, updated_by_user_id, nap_id)
 select 
 	mcr_current.registration_id as registration_id,
-	mcr_current.registration_id as paper_deed_id,
+	mcr_current.registration_id as source_paper_deed_id,
 	case mcr_current.status when 'VAL' then 0 when 'CAN' then 1 else null end as status_id,
 	mcr_current.ActDate as deed_date,
 	mcr_current.DossierReference as dossier_reference,
@@ -367,8 +373,6 @@ select
 	msig.organization_name as updated_by_organization_name,
 	demand_current.CreatorStudyId as updated_by_organization_id,
 	demand_current.CreatorPersonId as updated_by_user_id,
-	null as import_state,
-	null as import_result,
 	null as nap_id--,
 from [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_current (nolock) 
 inner join [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_first (nolock)
@@ -409,7 +413,7 @@ print ''
 print '   STAGING data for migrating juridical_deed'
 print '   ================================================================================'
 declare @juridicalDeedOffset as int
-select @juridicalDeedOffset = 1 + (select max(juridical_deed_id) from crt.juridical_deed)
+select @juridicalDeedOffset = 1 + (select isnull(max(juridical_deed_id),0) from crt.juridical_deed)
 
 CREATE TABLE #mig_juridical_deed
 (
@@ -437,14 +441,19 @@ CREATE TABLE #mig_juridical_deed
 	description varchar(100),
 	keeps_own_document bit,
 	previous_doc_contents_id tinyint,
-	publish_language varchar(2),
-	to_publish bit
+	--publish_language varchar(2),
+	to_publish bit,
+	provision_type varchar(100),
+	nature_decision varchar(100),
+	description_decision varchar(150),
+	deed_description varchar(150),
+	provision_date date
 );
 
 DBCC CHECKIDENT ('#mig_juridical_deed', RESEED, @juridicalDeedOffset) with NO_INFOMSGS
 print '   Offset id set to:        ' + convert(varchar(20), @juridicalDeedOffset)
 
-INSERT INTO #mig_juridical_deed( registration_id, source_juridical_deed_id,juridical_deed_number ,paper_deed_id ,status_id ,registration_type_id ,doc_contents_id ,to_invoice ,created_on ,updated_on ,updated_by_user_name ,created_by_organization_name ,created_by_organization_id ,created_by_user_name ,created_by_user_id ,updated_by_organization_name ,updated_by_organization_id ,updated_by_user_id ,operation_type_id ,register ,[description] ,keeps_own_document ,previous_doc_contents_id ,publish_language ,to_publish )
+INSERT INTO #mig_juridical_deed( registration_id, source_juridical_deed_id,juridical_deed_number ,paper_deed_id ,status_id ,registration_type_id ,doc_contents_id ,to_invoice ,created_on ,updated_on ,updated_by_user_name ,created_by_organization_name ,created_by_organization_id ,created_by_user_name ,created_by_user_id ,updated_by_organization_name ,updated_by_organization_id ,updated_by_user_id ,operation_type_id ,register ,[description] ,keeps_own_document ,previous_doc_contents_id ,to_publish, provision_type,	nature_decision ,	description_decision ,	deed_description ,	provision_date )
 SELECT 
 	mcr_current.registration_id as registration_id,
 	mcr_current.registration_id as source_juridical_deed_id,
@@ -507,8 +516,13 @@ SELECT
 		END
 	ELSE null
 	end as previous_doc_contents_id ,
-	mcr_current.BelgianJournalPublicationLanguage as publish_language , -- This will probably need to change after story of publications!
-	mcr_current.BelgianJournalPublicationRequested as to_publish -- This will probably need to change after story of pulications!
+	--mcr_current.BelgianJournalPublicationLanguage as publish_language , -- This will probably need to change after story of publications!
+	mcr_current.BelgianJournalPublicationRequested as to_publish, -- This will probably need to change after story of pulications!
+	null as provision_type,
+	null as natured_decision,
+	null as description_decision,
+	null as deed_description,
+	null as provision_date
 FROM [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_current (nolock) 
 inner join [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_first (nolock)
 	on mcr_current.active = 1
@@ -526,8 +540,8 @@ print ''
 print '   STAGING data for migrating publication_bog'
 print '   ================================================================================'
 declare @publicationBogOffset as int
--- select @publicationBogOffset = 1 + (select max(publication_bog_id) from crt.publication_bog) -- TODO: Enable this!
-set @publicationBogOffset = 1
+select @publicationBogOffset = 1 + (select isnull(max(publication_bog_id), 0) from crt.publication_bog) -- TODO: Enable this!
+
 
 CREATE TABLE #mig_publication_bog
 (
@@ -568,7 +582,7 @@ print ''
 print '   STAGING data for migrating person'
 print '   ================================================================================'
 declare @personOffset as int
-select @personOffset = 1 + (select max(person_id) from crt.person)
+select @personOffset = 1 + (select isnull(max(person_id), 0) from crt.person)
 
 CREATE TABLE #mig_person
 (
@@ -589,12 +603,13 @@ CREATE TABLE #mig_person
 	name varchar(256),
 	enterprise_number varchar(10),
 	juridical_form varchar(50),
+	is_deceased bit
 );
 
 DBCC CHECKIDENT ('#mig_person', RESEED, @personOffset) with NO_INFOMSGS
 print '   Offset id set to:        ' + convert(varchar(20), @personOffset)
 
-insert into #mig_person(registration_id, source_person_id, person_type, nrn, first_name, last_name, birth_date, birth_country_code, birth_country_description, birth_municipality_nis_code, birth_municipality_name, juridical_deed_id, person_role_id, name, enterprise_number, juridical_form)
+insert into #mig_person(registration_id, source_person_id, person_type, nrn, first_name, last_name, birth_date, birth_country_code, birth_country_description, birth_municipality_nis_code, birth_municipality_name, juridical_deed_id, person_role_id, name, enterprise_number, juridical_form, is_deceased)
 select 
 	mjd.registration_id as registration_id,
 	p.involvedparty_id as source_person_id ,
@@ -616,7 +631,8 @@ select
 	4 as person_role_id ,
 	null as name ,
 	null as enterprise_number ,
-	null as juridical_form
+	null as juridical_form,
+	case when p.DeceaseYear is null then 1 else 0 end as is_deceased
 from #mig_juridical_deed mjd (nolock) 
 inner join [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_current (nolock) 
 	on mcr_current.registration_id = mjd.source_juridical_deed_id
@@ -635,7 +651,7 @@ print ''
 print '   STAGING data for migrating address'
 print '   ================================================================================'
 declare @addressOffset as int
-select @addressOffset = 1 + (select max(address_id) from crt.address)
+select @addressOffset = 1 + (select isnull(max(address_id), 0) from crt.address)
 
 
 
@@ -691,10 +707,10 @@ where isnull(mr.status, 'corrected') = 'corrected'
 print '   Staged record count:     ' + convert(varchar(20), @@rowcount)
 
 print ''
-print '   STAGING data for migrating address_lines'
+print '   STAGING data for migrating address_line'
 print '   ================================================================================'
 declare @addressLineOffset as int
-select @addressLineOffset = 1 + (select max(address_line_id) from crt.address_line)
+select @addressLineOffset = 1 + (select isnull(max(address_line_id), 1) from crt.address_line)
 
 CREATE TABLE #mig_address_line
 (
@@ -787,10 +803,14 @@ print '   Staged record count:     ' + convert(varchar(20), @@rowcount)
 --                                                                                     --
 -----------------------------------------------------------------------------------------
 
+/*
 insert into migration.migration_crh_log(registration_id, resource_type, resource_id, status, migrated_on, migrated_id, message, run_uuid)
 select top 10 m.registration_id, 'address_abroad', source_address_abroad_id, 'error', getdate(), address_abroad_id, 'Test Error to show how it works', @runId
 from #mig_address_abroad m
-
+*/
+---
+---
+---
 
 
 
@@ -807,8 +827,8 @@ print '   ======================================================================
 
 SET IDENTITY_INSERT [CRT].address_abroad on 
 
-insert into [CRT].address_abroad(address_abroad_id, country, municipality, house_number, street, type_map)
-select address_abroad_id, country, municipality, house_number, street, type_map
+insert into [CRT].address_abroad(address_abroad_id, country, municipality, house_number, street/*, type_map*/)
+select address_abroad_id, country, municipality, house_number, street/*, type_map*/
 from #mig_address_abroad m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
@@ -835,8 +855,8 @@ print '   ======================================================================
 
 SET IDENTITY_INSERT [CRT].inscription_requester on 
 
-insert into [CRT].inscription_requester(requester_id, requester_type, organization_id, organization_name, notary_id, notary_firstname, notary_lastname, address_abroad_id, notary_abroad_name, study_abroad_name)
-select requester_id, requester_type, organization_id, organization_name, notary_id, notary_firstname, notary_lastname, address_abroad_id, notary_abroad_name, study_abroad_name
+insert into [CRT].inscription_requester(requester_id, requester_type, organization_id, organization_name, notary_id, notary_firstname, notary_lastname, address_abroad_id, notary_abroad_name, study_abroad_name, clerk_name, court_name)
+select requester_id, requester_type, organization_id, organization_name, notary_id, notary_firstname, notary_lastname, address_abroad_id, notary_abroad_name, study_abroad_name, clerk_name, court_name
 from #mig_inscription_requester m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
@@ -864,8 +884,8 @@ print '   ======================================================================
 
 SET IDENTITY_INSERT [CRT].signatory on 
 
-insert into [CRT].signatory(signatory_id, organization_id, organization_name, notary_id, notary_firstname, notary_lastname, signatory_type, address_abroad_id, notary_abroad_name, study_abroad_name, nrn)
-select signatory_id, organization_id, organization_name, notary_id, notary_firstname, notary_lastname, signatory_type, address_abroad_id, notary_abroad_name, study_abroad_name, nrn
+insert into [CRT].signatory(signatory_id, organization_id, organization_name, notary_id, notary_firstname, notary_lastname, signatory_type, address_abroad_id, notary_abroad_name, study_abroad_name, clerk_name, court_name)
+select signatory_id, organization_id, organization_name, notary_id, notary_firstname, notary_lastname, signatory_type, address_abroad_id, notary_abroad_name, study_abroad_name, clerk_name, court_name
 from #mig_signatory m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
@@ -894,8 +914,8 @@ print '   ======================================================================
 
 SET IDENTITY_INSERT [CRT].paper_deed on
 
-insert into [CRT].paper_deed(paper_deed_id, status_id, deed_date, dossier_reference, repertorium_number, request_date, signatory_id, created_on, updated_on, updated_by_user_name, created_by_organization_name, created_by_organization_id, created_by_user_name, created_by_user_id, requester_id, updated_by_organization_name, updated_by_organization_id, updated_by_user_id, import_state, import_result, nap_id)
-select paper_deed_id, status_id, deed_date, dossier_reference, repertorium_number, request_date, signatory_id, created_on, updated_on, updated_by_user_name, created_by_organization_name, created_by_organization_id, created_by_user_name, created_by_user_id, requester_id, updated_by_organization_name, updated_by_organization_id, updated_by_user_id, import_state, import_result, nap_id
+insert into [CRT].paper_deed(paper_deed_id, status_id, deed_date, dossier_reference, repertorium_number, request_date, signatory_id, created_on, updated_on, updated_by_user_name, created_by_organization_name, created_by_organization_id, created_by_user_name, created_by_user_id, requester_id, updated_by_organization_name, updated_by_organization_id, updated_by_user_id, nap_id)
+select paper_deed_id, status_id, deed_date, dossier_reference, repertorium_number, request_date, signatory_id, created_on, updated_on, updated_by_user_name, created_by_organization_name, created_by_organization_id, created_by_user_name, created_by_user_id, requester_id, updated_by_organization_name, updated_by_organization_id, updated_by_user_id, nap_id
 from #mig_paper_deed m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
@@ -922,8 +942,8 @@ print '   ======================================================================
 
 SET IDENTITY_INSERT [CRT].juridical_deed on
 	
-insert into [CRT].juridical_deed(juridical_deed_id,juridical_deed_number ,paper_deed_id ,status_id ,registration_type_id ,doc_contents_id ,to_invoice ,created_on ,updated_on ,updated_by_user_name ,created_by_organization_name ,created_by_organization_id ,created_by_user_name ,created_by_user_id ,updated_by_organization_name ,updated_by_organization_id ,updated_by_user_id ,operation_type_id ,register ,[description] ,keeps_own_document ,previous_doc_contents_id ,publish_language ,to_publish )
-select juridical_deed_id,juridical_deed_number ,paper_deed_id ,status_id ,registration_type_id ,doc_contents_id ,to_invoice ,created_on ,updated_on ,updated_by_user_name ,created_by_organization_name ,created_by_organization_id ,created_by_user_name ,created_by_user_id ,updated_by_organization_name ,updated_by_organization_id ,updated_by_user_id ,operation_type_id ,register ,[description] ,keeps_own_document ,previous_doc_contents_id ,publish_language ,to_publish 
+insert into [CRT].juridical_deed(juridical_deed_id,juridical_deed_number ,paper_deed_id ,status_id ,registration_type_id ,doc_contents_id ,to_invoice ,created_on ,updated_on ,updated_by_user_name ,created_by_organization_name ,created_by_organization_id ,created_by_user_name ,created_by_user_id ,updated_by_organization_name ,updated_by_organization_id ,updated_by_user_id ,operation_type_id ,register ,[description] ,keeps_own_document ,previous_doc_contents_id ,to_publish, provision_type, nature_decision, description_decision, deed_description, provision_date )
+select juridical_deed_id,juridical_deed_number ,paper_deed_id ,status_id ,registration_type_id ,doc_contents_id ,to_invoice ,created_on ,updated_on ,updated_by_user_name ,created_by_organization_name ,created_by_organization_id ,created_by_user_name ,created_by_user_id ,updated_by_organization_name ,updated_by_organization_id ,updated_by_user_id ,operation_type_id ,register ,[description] ,keeps_own_document ,previous_doc_contents_id ,to_publish, provision_type, nature_decision, description_decision, deed_description, provision_date
 from #mig_juridical_deed m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
@@ -982,8 +1002,8 @@ print '   ======================================================================
 
 SET IDENTITY_INSERT [CRT].person on
 	
-insert into [CRT].person(person_id, person_type, nrn, first_name, last_name, birth_date, birth_country_code, birth_country_description, birth_municipality_nis_code, birth_municipality_name, juridical_deed_id, person_role_id, name, enterprise_number, juridical_form )
-select person_id, person_type, nrn, first_name, last_name, birth_date, birth_country_code, birth_country_description, birth_municipality_nis_code, birth_municipality_name, juridical_deed_id, person_role_id, name, enterprise_number, juridical_form 
+insert into [CRT].person(person_id, person_type, nrn, first_name, last_name, birth_date, birth_country_code, birth_country_description, birth_municipality_nis_code, birth_municipality_name, juridical_deed_id, person_role_id, name, enterprise_number, juridical_form, is_deceased )
+select person_id, person_type, nrn, first_name, last_name, birth_date, birth_country_code, birth_country_description, birth_municipality_nis_code, birth_municipality_name, juridical_deed_id, person_role_id, name, enterprise_number, juridical_form, is_deceased
 from #mig_person m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
@@ -1097,11 +1117,5 @@ begin
 	rollback
 	print '!! TRANSACTION ROLLED BACK.  MIGRATION DID NOT COMPLETE - DRY RUN ONLY'
 end
-
-
-
-
-
-
 
 
