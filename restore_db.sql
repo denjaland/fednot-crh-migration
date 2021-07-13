@@ -4,7 +4,8 @@
 declare @source_db				as varchar(100)		= 'mig_crh_source'
 declare @source_backup_file		as varchar(100)		= 'F:\Backup\oltp\ContractRegistrationService_anon_20210430.bak'
 declare @staging_db             as varchar(100)     = 'mig_crh_staging'
-declare @staging_backup_file	as varchar(100)		= 'F:\Backup\oltp\UnifiedRegisters_anon_20210430.bak'
+--declare @staging_backup_file	as varchar(100)		= 'F:\Backup\oltp\UnifiedRegisters_anon_20210430.bak'
+declare @staging_backup_file	as varchar(100)		= 'F:\Backup\oltp\mig-crh-staging-before.bak'
 
 --  RESTORE PARAMETERS
 declare @restore_source_db		as tinyint			= 0		-- should the source database be restored 1/0
@@ -61,6 +62,7 @@ BEGIN
 END
 
 
+
 print ''
 print '    1.2.   Restore staging database'
 print '    -----------------------------------------------------------------------------------'
@@ -89,6 +91,12 @@ BEGIN
 	exec('ALTER DATABASE [' + @staging_db + '] SET MULTI_USER')
 	print 'OK  Source database restored to ' + @staging_db
 	print @@error
+
+
+	-- CREATE USER [genSqlTstUnifiedRegisters] WITHOUT LOGIN WITH DEFAULT_SCHEMA=[dbo]
+    -- ALTER LOGIN genSqlTstUnifiedRegisters with PASSWORD = '6vARCGpHw7GLBykv60fkqfp9uS7auUuHP3IOz3pP'
+
+
 END
 else
 BEGIN
