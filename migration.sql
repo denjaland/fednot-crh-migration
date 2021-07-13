@@ -1098,6 +1098,20 @@ print '   Logged record count  :   ' + convert(varchar(20), @@rowcount)
 
 
 print ''
+print '   CORRECT concatenation of person.first_name, replacing | by a space'
+print '   ================================================================================'
+print '   Please note we explicitely run the update POST migration to also correct the'
+print '   already existing persons in the database for CRT due to daily migration.'
+print ''
+
+update crt.person
+set first_name = replace(first_name, '|', ' ')
+where first_name like '%|%'
+
+print '   Updated record count :   ' + convert(varchar(20), @@rowcount)
+
+
+print ''
 print '   CLEANUP dropping temporary tables'
 print '   ================================================================================'
 
