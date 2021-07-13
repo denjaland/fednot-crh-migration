@@ -138,7 +138,8 @@ INNER JOIN [mig_crh_source].[CRS].penholder ph  (nolock)
 	and ph.penholdertype = 'FOREIG'
 left outer join migration.migration_crh_log mr  (nolock) 
 	on mr.registration_id = mcr_current.registration_id
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status <> 'corrected'
+where mr.status is null
 
 print '   Staged record count:     ' + convert(varchar(20), @@rowcount)
 
@@ -176,16 +177,18 @@ print '   Offset id set to:        ' + convert(varchar(20), @requesterOffset)
 
 
 
-
 insert into #mig_inscription_requester(registration_id, source_requester_id, requester_type, organization_id, organization_name, notary_id, notary_firstname, notary_lastname, address_abroad_id, notary_abroad_name, study_abroad_name, clerk_name, court_name)
 select 
 	mcr_current.Registration_Id as registration_id,
 	req.requester_id as requester_id,
 	CASE req.RequesterType
-	  WHEN 'CCLERK' THEN 'COURT'
-      WHEN 'MOROAS' THEN 'ABROAD'  
-	  WHEN 'STUDY' THEN 'STUDY'
-      ELSE 'OTHER_REQUESTER'
+
+	  WHEN 'MOROAS' THEN 'REGISTER_ABROAD_MANAGER'  
+      WHEN 'FRNB' THEN 'FEDNOT'
+      WHEN 'FPSFA' then 'FOREIGN_AFFAIRS'
+	  WHEN 'CCLERK' then 'COURT'
+	  WHEN 'STUDY' then 'STUDY'
+      ELSE 'ERROR'
     END	as requester_type,
 	CASE
 		WHEN req.requestertype = 'FRNB' THEN isnull(demand_first.creatorstudyid, 214422)
@@ -222,7 +225,6 @@ select
 	null as study_abroad_name,
 	null as clerk_name,
 	null as court_name
-
 from [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_current (nolock) 
 inner join [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_first (nolock)
 	on mcr_current.active = 1
@@ -241,9 +243,10 @@ LEFT JOIN [mig_crh_source].[CRS].penholder ph  (nolock)
 LEFT JOIN #mig_address_abroad maa
 	on maa.registration_id = mcr_current.registration_id
 	and maa.source_address_abroad_id = ph.penholder_id
-left join migration.migration_crh_log mr  (nolock) 
+left outer join migration.migration_crh_log mr  (nolock) 
 	on mr.registration_id = mcr_current.registration_id
-where isnull(mr.status, 'corrected') = 'corrected'  
+	and mr.status <> 'corrected'
+where mr.status is null
 
 print '   Staged record count:     ' + convert(varchar(20), @@rowcount)
 
@@ -303,9 +306,10 @@ inner join [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_first (nolo
 	and mcr_first.version = 1
 inner join [mig_crh_source].[CRS].penholder ph  (nolock) 
 	on ph.penholder_id = mcr_current.PenHolder_Id
-left outer join migration.migration_crh_log mr (nolock) 
+left outer join migration.migration_crh_log mr  (nolock) 
 	on mr.registration_id = mcr_current.registration_id
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status <> 'corrected'
+where mr.status is null
 
 print '   Staged record count:     ' + convert(varchar(20), @@rowcount)
 
@@ -401,9 +405,10 @@ left join [mig_crh_source].[CRS].[Requester] req (nolock)
 	and req.Requester_Id = (select min(requester_id) from [mig_crh_source].[CRS].[Requester] (nolock) where AbstractRequest_Id = demand_first.AbstractRequest_Id)
 left join #mig_inscription_requester reqmap (nolock) 
 	on req.Requester_Id = reqmap.source_requester_id
-left outer join migration.migration_crh_log mr (nolock) 
+left outer join migration.migration_crh_log mr  (nolock) 
 	on mr.registration_id = mcr_current.registration_id
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status <> 'corrected'
+where mr.status is null
 
 print '   Staged record count:     ' + convert(varchar(20), @@rowcount) + ' / ' + convert(varchar(20), @expectedNumberOfPaperDeeds) + ' expected'
 
@@ -530,9 +535,10 @@ inner join [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_first (nolo
 	and mcr_first.Version = 1
 inner join #mig_paper_deed mpd (nolock) 
 	on mpd.source_paper_deed_id = mcr_current.registration_id
-left outer join migration.migration_crh_log mr (nolock) 
+left outer join migration.migration_crh_log mr  (nolock) 
 	on mr.registration_id = mcr_current.registration_id
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status <> 'corrected'
+where mr.status is null
 print '   Staged record count:     ' + convert(varchar(20), @@rowcount)
 	
 
@@ -574,7 +580,10 @@ inner join #mig_paper_deed mpd (nolock)
 	on mpd.source_paper_deed_id = mcr_current.registration_id
 inner join #mig_juridical_deed mjd (nolock)
 	on mjd.source_juridical_deed_id = mcr_current.registration_id
-
+left outer join migration.migration_crh_log mr  (nolock) 
+	on mr.registration_id = mcr_current.registration_id
+	and mr.status <> 'corrected'
+where mr.status is null
 
 print '   Staged record count:     ' + convert(varchar(20), @@rowcount)
 
@@ -641,9 +650,10 @@ inner join [mig_crh_source].[CRS].InvolvedParty p (nolock)
 	or p.involvedparty_id = mcr_current.party2_id
 left outer join [mig_crh_source].[CRS].Country c (nolock) 
 	on c.code = p.birthCountry
-left outer join migration.migration_crh_log mr (nolock) 
+left outer join migration.migration_crh_log mr  (nolock) 
 	on mr.registration_id = mcr_current.registration_id
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status <> 'corrected'
+where mr.status is null
 
 print '   Staged record count:     ' + convert(varchar(20), @@rowcount)
 
@@ -700,9 +710,10 @@ left join [mig_crh_source].[CRS].Country c (nolock)
 inner join #mig_person mp (nolock) 
 	on mp.source_person_id = p.InvolvedParty_Id
 	and mp.registration_id = mcr_current.registration_id
-left outer join migration.migration_crh_log mr (nolock) 
+left outer join migration.migration_crh_log mr  (nolock) 
 	on mr.registration_id = mcr_current.registration_id
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status <> 'corrected'
+where mr.status is null
 
 print '   Staged record count:     ' + convert(varchar(20), @@rowcount)
 
@@ -735,9 +746,10 @@ inner join [mig_crh_source].[CRS].InvolvedParty p (nolock)
 	on p.involvedparty_id = ma.source_address_id
 	and isnull(p.SA_AddressType, 'UNSTRUCTURED') <> 'STRUCT'
 	and p.UA_AddressLine1 is not null
-left outer join migration.migration_crh_log mr (nolock) 
+left outer join migration.migration_crh_log mr  (nolock) 
 	on mr.registration_id = ma.registration_id
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status <> 'corrected'
+where mr.status is null
 union 
 select 
 	ma.registration_id,
@@ -749,9 +761,10 @@ inner join [mig_crh_source].[CRS].InvolvedParty p (nolock)
 	on p.involvedparty_id = ma.source_address_id
 	and isnull(p.SA_AddressType, 'UNSTRUCTURED') <> 'STRUCT'
 	and p.UA_AddressLine2 is not null
-left outer join migration.migration_crh_log mr (nolock) 
+left outer join migration.migration_crh_log mr  (nolock) 
 	on mr.registration_id = ma.registration_id
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status <> 'corrected'
+where mr.status is null
 union 
 select 
 	ma.registration_id,
@@ -763,9 +776,10 @@ inner join [mig_crh_source].[CRS].InvolvedParty p (nolock)
 	on p.involvedparty_id = ma.source_address_id
 	and isnull(p.SA_AddressType, 'UNSTRUCTURED') <> 'STRUCT'
 	and p.UA_AddressLine3 is not null
-left outer join migration.migration_crh_log mr (nolock) 
+left outer join migration.migration_crh_log mr  (nolock) 
 	on mr.registration_id = ma.registration_id
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status <> 'corrected'
+where mr.status is null
 union 
 select 
 	ma.registration_id,
@@ -777,9 +791,10 @@ inner join [mig_crh_source].[CRS].InvolvedParty p (nolock)
 	on p.involvedparty_id = ma.source_address_id
 	and isnull(p.SA_AddressType, 'UNSTRUCTURED') <> 'STRUCT'
 	and p.UA_AddressLine4 is not null
-left outer join migration.migration_crh_log mr (nolock) 
+left outer join migration.migration_crh_log mr  (nolock) 
 	on mr.registration_id = ma.registration_id
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status <> 'corrected'
+where mr.status is null
 union 
 select 
 	ma.registration_id,
@@ -791,9 +806,10 @@ inner join [mig_crh_source].[CRS].InvolvedParty p (nolock)
 	on p.involvedparty_id = ma.source_address_id
 	and isnull(p.SA_AddressType, 'UNSTRUCTURED') <> 'STRUCT'
 	and p.UA_AddressLine5 is not null
-left outer join migration.migration_crh_log mr (nolock) 
+left outer join migration.migration_crh_log mr  (nolock) 
 	on mr.registration_id = ma.registration_id
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status <> 'corrected'
+where mr.status is null
 order by address_id, source_address_line_id
 print '   Staged record count:     ' + convert(varchar(20), @@rowcount)
 
@@ -803,14 +819,12 @@ print '   Staged record count:     ' + convert(varchar(20), @@rowcount)
 --                                                                                     --
 -----------------------------------------------------------------------------------------
 
-/*
 insert into migration.migration_crh_log(registration_id, resource_type, resource_id, status, migrated_on, migrated_id, message, run_uuid)
-select top 10 m.registration_id, 'address_abroad', source_address_abroad_id, 'error', getdate(), address_abroad_id, 'Test Error to show how it works', @runId
-from #mig_address_abroad m
-*/
----
----
----
+select top 10 m.registration_id, 'inscription_requester', source_requester_id, 'error', getdate(), requester_id, 'Invalid requester type: ' + m.requester_type + ' not mapped', @runId
+from #mig_inscription_requester m
+
+
+
 
 
 
