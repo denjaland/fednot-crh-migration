@@ -820,8 +820,9 @@ print '   Staged record count:     ' + convert(varchar(20), @@rowcount)
 -----------------------------------------------------------------------------------------
 
 insert into migration.migration_crh_log(registration_id, resource_type, resource_id, status, migrated_on, migrated_id, message, run_uuid)
-select top 10 m.registration_id, 'inscription_requester', source_requester_id, 'error', getdate(), requester_id, 'Invalid requester type: ' + m.requester_type + ' not mapped', @runId
+select m.registration_id, 'inscription_requester', source_requester_id, 'error', getdate(), requester_id, 'Invalid requester type: ' + m.requester_type + ' not mapped', @runId
 from #mig_inscription_requester m
+where m.requester_type = 'ERROR'
 
 
 
