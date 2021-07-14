@@ -446,8 +446,6 @@ CREATE TABLE #mig_juridical_deed
 	description varchar(100),
 	keeps_own_document bit,
 	previous_doc_contents_id tinyint,
-	--publish_language varchar(2),
-	to_publish bit,
 	provision_type varchar(100),
 	nature_decision varchar(100),
 	description_decision varchar(150),
@@ -458,7 +456,7 @@ CREATE TABLE #mig_juridical_deed
 DBCC CHECKIDENT ('#mig_juridical_deed', RESEED, @juridicalDeedOffset) with NO_INFOMSGS
 print '   Offset id set to:        ' + convert(varchar(20), @juridicalDeedOffset)
 
-INSERT INTO #mig_juridical_deed( registration_id, source_juridical_deed_id,juridical_deed_number ,paper_deed_id ,status_id ,registration_type_id ,doc_contents_id ,to_invoice ,created_on ,updated_on ,updated_by_user_name ,created_by_organization_name ,created_by_organization_id ,created_by_user_name ,created_by_user_id ,updated_by_organization_name ,updated_by_organization_id ,updated_by_user_id ,operation_type_id ,register ,[description] ,keeps_own_document ,previous_doc_contents_id ,to_publish, provision_type,	nature_decision ,	description_decision ,	deed_description ,	provision_date )
+INSERT INTO #mig_juridical_deed( registration_id, source_juridical_deed_id,juridical_deed_number ,paper_deed_id ,status_id ,registration_type_id ,doc_contents_id ,to_invoice ,created_on ,updated_on ,updated_by_user_name ,created_by_organization_name ,created_by_organization_id ,created_by_user_name ,created_by_user_id ,updated_by_organization_name ,updated_by_organization_id ,updated_by_user_id ,operation_type_id ,register ,[description] ,keeps_own_document ,previous_doc_contents_id , provision_type,	nature_decision ,	description_decision ,	deed_description ,	provision_date )
 SELECT 
 	mcr_current.registration_id as registration_id,
 	mcr_current.registration_id as source_juridical_deed_id,
@@ -521,8 +519,6 @@ SELECT
 		END
 	ELSE null
 	end as previous_doc_contents_id ,
-	--mcr_current.BelgianJournalPublicationLanguage as publish_language , -- This will probably need to change after story of publications!
-	mcr_current.BelgianJournalPublicationRequested as to_publish, -- This will probably need to change after story of pulications!
 	null as provision_type,
 	null as natured_decision,
 	null as description_decision,
@@ -847,8 +843,8 @@ select address_abroad_id, country, municipality, house_number, street/*, type_ma
 from #mig_address_abroad m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
-	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status = 'error'
+where mr.status is null
 
 print '   Promoted record count:   ' + convert(varchar(20), @@rowcount)
 
@@ -857,8 +853,8 @@ select m.registration_id, 'address_abroad', source_address_abroad_id, 'migrated'
 from #mig_address_abroad m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
-	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status = 'error'
+where mr.status is null
 
 print '   Logged record count  :   ' + convert(varchar(20), @@rowcount)
 
@@ -875,8 +871,8 @@ select requester_id, requester_type, organization_id, organization_name, notary_
 from #mig_inscription_requester m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
-	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status = 'error'
+where mr.status is null
 
 print '   Promoted record count:   ' + convert(varchar(20), @@rowcount)
 
@@ -885,8 +881,8 @@ select m.registration_id, 'inscription_requester', source_requester_id, 'migrate
 from #mig_inscription_requester m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
-	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status = 'error'
+where mr.status is null
 
 print '   Logged record count  :   ' + convert(varchar(20), @@rowcount)
 
@@ -904,8 +900,8 @@ select signatory_id, organization_id, organization_name, notary_id, notary_first
 from #mig_signatory m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
-	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status = 'error'
+where mr.status is null
 
 print '   Promoted record count:   ' + convert(varchar(20), @@rowcount)
 
@@ -916,8 +912,8 @@ select m.registration_id, 'signatory', source_signatory_id, 'migrated', getdate(
 from #mig_signatory m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
-	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status = 'error'
+where mr.status is null
 
 print '   Logged record count  :   ' + convert(varchar(20), @@rowcount)
 
@@ -934,8 +930,8 @@ select paper_deed_id, status_id, deed_date, dossier_reference, repertorium_numbe
 from #mig_paper_deed m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
-	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status = 'error'
+where mr.status is null
 
 print '   Promoted record count:   ' + convert(varchar(20), @@rowcount)
 
@@ -946,8 +942,8 @@ select m.registration_id, 'paper_deed', source_paper_deed_id, 'migrated', getdat
 from #mig_paper_deed m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
-	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status = 'error'
+where mr.status is null
 
 print '   Logged record count  :   ' + convert(varchar(20), @@rowcount)
 
@@ -957,13 +953,13 @@ print '   ======================================================================
 
 SET IDENTITY_INSERT [CRT].juridical_deed on
 	
-insert into [CRT].juridical_deed(juridical_deed_id,juridical_deed_number ,paper_deed_id ,status_id ,registration_type_id ,doc_contents_id ,to_invoice ,created_on ,updated_on ,updated_by_user_name ,created_by_organization_name ,created_by_organization_id ,created_by_user_name ,created_by_user_id ,updated_by_organization_name ,updated_by_organization_id ,updated_by_user_id ,operation_type_id ,register ,[description] ,keeps_own_document ,previous_doc_contents_id ,to_publish, provision_type, nature_decision, description_decision, deed_description, provision_date )
-select juridical_deed_id,juridical_deed_number ,paper_deed_id ,status_id ,registration_type_id ,doc_contents_id ,to_invoice ,created_on ,updated_on ,updated_by_user_name ,created_by_organization_name ,created_by_organization_id ,created_by_user_name ,created_by_user_id ,updated_by_organization_name ,updated_by_organization_id ,updated_by_user_id ,operation_type_id ,register ,[description] ,keeps_own_document ,previous_doc_contents_id ,to_publish, provision_type, nature_decision, description_decision, deed_description, provision_date
+insert into [CRT].juridical_deed(juridical_deed_id,juridical_deed_number ,paper_deed_id ,status_id ,registration_type_id ,doc_contents_id ,to_invoice ,created_on ,updated_on ,updated_by_user_name ,created_by_organization_name ,created_by_organization_id ,created_by_user_name ,created_by_user_id ,updated_by_organization_name ,updated_by_organization_id ,updated_by_user_id ,operation_type_id ,register ,[description] ,keeps_own_document ,previous_doc_contents_id , provision_type, nature_decision, description_decision, deed_description, provision_date )
+select juridical_deed_id,juridical_deed_number ,paper_deed_id ,status_id ,registration_type_id ,doc_contents_id ,to_invoice ,created_on ,updated_on ,updated_by_user_name ,created_by_organization_name ,created_by_organization_id ,created_by_user_name ,created_by_user_id ,updated_by_organization_name ,updated_by_organization_id ,updated_by_user_id ,operation_type_id ,register ,[description] ,keeps_own_document ,previous_doc_contents_id , provision_type, nature_decision, description_decision, deed_description, provision_date
 from #mig_juridical_deed m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
-	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status = 'error'
+where mr.status is null
 
 print '   Promoted record count:   ' + convert(varchar(20), @@rowcount)
 
@@ -974,8 +970,8 @@ select m.registration_id, 'juridical_deed', source_juridical_deed_id, 'migrated'
 from #mig_juridical_deed m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
-	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status = 'error'
+where mr.status is null
 
 print '   Logged record count  :   ' + convert(varchar(20), @@rowcount)
 
@@ -991,8 +987,8 @@ select publication_bog_id,juridical_deed_id ,publish_status_id ,publish_language
 from #mig_publication_bog m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
-	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status = 'error'
+where mr.status is null
 
 print '   Promoted record count:   ' + convert(varchar(20), @@rowcount)
 
@@ -1003,8 +999,8 @@ select m.registration_id, 'publication_bog', source_publication_bog_id, 'migrate
 from #mig_publication_bog m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
-	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status = 'error'
+where mr.status is null
 
 print '   Logged record count  :   ' + convert(varchar(20), @@rowcount)
 
@@ -1022,8 +1018,8 @@ select person_id, person_type, nrn, first_name, last_name, birth_date, birth_cou
 from #mig_person m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
-	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status = 'error'
+where mr.status is null
 
 print '   Promoted record count:   ' + convert(varchar(20), @@rowcount)
 
@@ -1034,8 +1030,8 @@ select m.registration_id, 'person', source_person_id, 'migrated', getdate(), per
 from #mig_person m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
-	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status = 'error'
+where mr.status is null
 
 print '   Logged record count  :   ' + convert(varchar(20), @@rowcount)
 
@@ -1052,8 +1048,8 @@ select address_id ,person_id ,country_code ,country_description ,municipality_ni
 from #mig_address m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
-	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status = 'error'
+where mr.status is null
 
 print '   Promoted record count:   ' + convert(varchar(20), @@rowcount)
 
@@ -1064,8 +1060,8 @@ select m.registration_id, 'address', source_address_id, 'migrated', getdate(), a
 from #mig_address m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
-	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status = 'error'
+where mr.status is null
 
 print '   Logged record count  :   ' + convert(varchar(20), @@rowcount)
 
@@ -1080,8 +1076,8 @@ select address_line_id, lines, address_id
 from #mig_address_line m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
-	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status = 'error'
+where mr.status is null
 
 print '   Promoted record count:   ' + convert(varchar(20), @@rowcount)
 
@@ -1092,8 +1088,8 @@ select m.registration_id, 'address_line', source_address_line_id, 'migrated', ge
 from #mig_address_line m
 left outer join migration.migration_crh_log mr
 	on mr.registration_id = m.registration_id
-	and (mr.status <> 'migrated' or mr.run_uuid <> @runId)
-where isnull(mr.status, 'corrected') = 'corrected'
+	and mr.status = 'error'
+where mr.status is null
 
 print '   Logged record count  :   ' + convert(varchar(20), @@rowcount)
 
