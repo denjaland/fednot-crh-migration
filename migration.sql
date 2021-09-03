@@ -563,7 +563,7 @@ SELECT
 	mcr_current.registration_id as registration_id, 
 	mcr_current.registration_id as source_publication_bog_id,
 	mjd.juridical_deed_id as juridical_deed_id,
-	1 as publish_status_id, -- all is sent
+	2 as publish_status_id, -- all is sent
 	mcr_current.BelgianJournalPublicationLanguage as publish_language
 FROM [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_current (nolock) 
 inner join [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_first (nolock)
@@ -1142,5 +1142,4 @@ begin
 	rollback
 	print '!! TRANSACTION ROLLED BACK.  MIGRATION DID NOT COMPLETE - DRY RUN ONLY'
 end
-
 
