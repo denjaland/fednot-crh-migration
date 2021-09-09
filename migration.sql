@@ -1,5 +1,5 @@
 
-declare @dryRun int = 0		-- 1: does not insert data into production tables; 0 does.
+declare @dryRun int = 1		-- 1: does not insert data into production tables; 0 does.
 
 
 print '   *************************************************************************************'
@@ -563,15 +563,15 @@ SELECT
 	mcr_current.registration_id as registration_id, 
 	mcr_current.registration_id as source_publication_bog_id,
 	mjd.juridical_deed_id as juridical_deed_id,
-	2 as publish_status_id, -- all is sent
-	mcr_current.BelgianJournalPublicationLanguage as publish_language
+	case when mcr_current.BelgianJournalPublicationRequested = 1 then 2 else 0 end as publish_status_id, 
+	case when mcr_current.BelgianJournalPublicationRequested = 1 then mcr_current.BelgianJournalPublicationLanguage else null end as publish_language
 FROM [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_current (nolock) 
 inner join [mig_crh_source].[CRS].[MarriageContractRegistration] mcr_first (nolock)
 	on mcr_current.active = 1
 	and mcr_current.number = mcr_first.number
 	and mcr_first.Version = 1
 	and mcr_current.registrationsubtype = 'HMODDEED'
-	and mcr_current.belgianjournalpublicationrequested = 1
+	-- and mcr_current.belgianjournalpublicationrequested = 1
 inner join #mig_paper_deed mpd (nolock) 
 	on mpd.source_paper_deed_id = mcr_current.registration_id
 inner join #mig_juridical_deed mjd (nolock)
@@ -1142,4 +1142,3 @@ begin
 	rollback
 	print '!! TRANSACTION ROLLED BACK.  MIGRATION DID NOT COMPLETE - DRY RUN ONLY'
 end
-
