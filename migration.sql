@@ -289,6 +289,7 @@ select
 	case ph.PenHolderType 
 		when 'NOT' then 'STUDY'
         when 'FOREIG' then 'ABROAD'
+	when 'CCLERK' then 'COURT'
     else penholdertype end as signatory_type,
 	null as address_abroad_id,
 	null as notary_abroad_name,
